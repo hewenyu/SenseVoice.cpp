@@ -13,6 +13,13 @@
 
 #include "sense-voice-frontend.h"
 
+#ifndef MIN
+#define MIN(a, b) ((a) < (b) ? (a) : (b))
+#endif
+
+#ifndef MAX
+#define MAX(a, b) ((a) > (b) ? (a) : (b))
+#endif
 
 #ifdef __GNUC__
 #define SENSEVOICE_DEPRECATED(func, hint) func __attribute__((deprecated(hint)))
@@ -34,12 +41,6 @@
 #endif
 #else
 #define SENSEVOICE_API
-#endif
-
-#define MIN(a, b) ((a) < (b) ? (a) : (b))
-#define MAX(a, b) ((a) > (b) ? (a) : (b))
-#if defined(_MSC_VER)
-#pragma warning(disable : 4244 4267)  // possible loss of data
 #endif
 
 #if defined(GGML_BIG_ENDIAN)
