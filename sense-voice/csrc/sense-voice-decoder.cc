@@ -84,48 +84,66 @@ bool sense_voice_decode_internal(sense_voice_context &ctx,
                                  const int n_threads) {
     const int64_t t_start_us = ggml_time_us();
 
-    // decoder
-    {
-        auto & sched = state.sched_decode.sched;
-
-
-        ggml_cgraph *gf = sense_voice_build_graph_ctc_decoder(ctx, state);
-
-//        sched->callback_eval = ctx.params.cb_eval;
-//        sched->callback_eval_data = ctx.params.cb_eval_user_data;
-
-        if (!ggml_backend_sched_alloc_graph(sched, gf)) {
-            // should never happen as we pre-allocate the memory
-            return false;
-        }
-
-
-        // set the input
+    try {
+        // decoder
         {
-            struct ggml_tensor *encoder_out = ggml_graph_get_tensor(gf, "encoder_out");
-            ggml_backend_tensor_copy(state.encoder_out, encoder_out);
-        }
+            auto & sched = state.sched_decode.sched;
 
-        if (!ggml_graph_compute_helper(sched, gf, n_threads)) {
-            return false;
-        }
-        {
-            ggml_tensor *argmax_logit = ggml_graph_node(gf, ggml_graph_n_nodes(gf) - 1);
-            state.ids.resize(argmax_logit->ne[0]);
-            ggml_backend_tensor_get(argmax_logit, state.ids.data(), 0, sizeof(int) * argmax_logit->ne[0]);
-            int last_id = 0;
-            for(int id: state.ids){
-                if (id != 0 && id != last_id) {
-                    printf("%s", ctx.vocab.id_to_token[id].c_str());
-                    last_id = id;
+            ggml_cgraph *gf = sense_voice_build_graph_ctc_decoder(ctx, state);
+
+            if (!ggml_backend_sched_alloc_graph(sched, gf)) {
+                return false;
+            }
+
+            // set the input
+            {
+                struct ggml_tensor *encoder_out = ggml_graph_get_tensor(gf, "encoder_out");
+                ggml_backend_tensor_copy(state.encoder_out, encoder_out);
+            }
+
+            if (!ggml_graph_compute_helper(sched, gf, n_threads)) {
+                return false;
+            }
+            {
+                ggml_tensor *argmax_logit = ggml_graph_node(gf, ggml_graph_n_nodes(gf) - 1);
+                state.ids.resize(argmax_logit->ne[0]);
+                ggml_backend_tensor_get(argmax_logit, state.ids.data(), 0, sizeof(int) * argmax_logit->ne[0]);
+                
+                // 创建一个新的识别结果
+                sense_voice_segment result;
+                result.text.clear();
+                
+                std::string current_text;
+                int last_id = 0;
+                
+                for(int id: state.ids) {
+                    if (id != 0 && id != last_id) {
+                        std::string token = ctx.vocab.id_to_token[id];
+                        
+                        // 跳过所有特殊标记
+                        if (token.find("<|") == std::string::npos && token.find("|>") == std::string::npos) {
+                            current_text += token;
+                        }
+                        
+                        last_id = id;
+                    }
+                }
+                
+                // 如果有有效文本，添加到结果列表中
+                if (!current_text.empty()) {
+                    result.text = current_text;
+                    state.result_all.push_back(result);
                 }
             }
-            printf("\n");
         }
 
+        state.t_decode_us += ggml_time_us() - t_start_us;
+        return true;
+    } catch (const std::exception& e) {
+        fprintf(stderr, "Exception in sense_voice_decode_internal: %s\n", e.what());
+        return false;
+    } catch (...) {
+        fprintf(stderr, "Unknown exception in sense_voice_decode_internal\n");
+        return false;
     }
-//    ggml_tensor *logit = ggml_get_tensor(ctx)
-    state.t_decode_us += ggml_time_us() - t_start_us;
-
-    return true;
 }
