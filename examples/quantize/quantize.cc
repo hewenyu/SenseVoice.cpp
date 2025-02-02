@@ -16,7 +16,14 @@
 #include <vector>
 #include <regex>
 
-
+// Platform specific main declaration
+#if defined(_WIN32)
+    #define WIN32_LEAN_AND_MEAN
+    #include <windows.h>
+    #define MAIN_DECL int main
+#else
+    #define MAIN_DECL int SDL_main
+#endif
 
 // quantize a model
 static bool sense_voice_model_quantize(const std::string & fname_inp, const std::string & fname_out, ggml_ftype ftype) {
@@ -148,7 +155,7 @@ static bool sense_voice_model_quantize(const std::string & fname_inp, const std:
     return true;
 }
 
-int main(int argc, char ** argv) {
+MAIN_DECL(int argc, char ** argv) {
     if (argc != 4) {
         fprintf(stderr, "usage: %s model-f32.bin model-quant.bin type\n", argv[0]);
         ggml_print_ftypes(stderr);
